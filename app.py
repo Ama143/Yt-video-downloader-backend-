@@ -31,6 +31,12 @@ def download():
         return jsonify({"error": str(e)}), 400
 
 
+def time_to_seconds(time_str):
+    try:
+        hours, minutes, seconds = map(int, time_str.split(':'))
+        return hours * 3600 + minutes * 60 + seconds
+    except ValueError:
+        raise ValueError("Invalid time format. Please use 'HH:MM:SS'.")
 
 
 @app.route('/transcript', methods=['POST'])
