@@ -128,7 +128,7 @@ def download_video_section(url, start_time, end_time, output_file):
         except Exception as e2:
             error_msg += f"\nSecond attempt failed: {str(e2)}"
         
-        root.after(0, lambda: messagebox.showerror("Error", f"An error occurred: {error_msg}"))
+        print(f"An error occurred: {error_msg}")
 
 
 @app.route('/transcript', methods=['POST'])
