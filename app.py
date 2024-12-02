@@ -1,7 +1,12 @@
 from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+
+CORS(app, origins=["https://yt-video-downloder.netlify.app"])
+
 @app.route('/')
 def home():
     return "Welcome to the Video Downloader API! Use the endpoints /download or /transcript."
