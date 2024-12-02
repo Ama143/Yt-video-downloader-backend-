@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
 
 app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Welcome to the Video Downloader API! Use the endpoints /download or /transcript."
+
 
 @app.route('/download', methods=['POST'])
 def download():
