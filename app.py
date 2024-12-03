@@ -59,7 +59,7 @@ def download_video_section(url, start_time, end_time, output_file):
     ydl_opts = {
         'format': '(bestvideo+bestaudio/best)[height>=?2160][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1440][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1080][fps>=?60]/bestvideo+bestaudio/best',
         'outtmpl': output_file,
-        'cookies': './cookies.txt',
+        'cookies': '/opt/render/project/src/cookies.txt',
         'cookies-from-browser':'chrome',
         'download_ranges': download_section(start_time, end_time),
         'merge_output_format': 'mp4',
@@ -152,7 +152,7 @@ def get_transcript():
 
 
             'writesubtitles': True,
-'cookies':'./cookies.txt',
+'cookies':'/opt/render/project/src/cookies.txt',
 
             'subtitleslangs': ['en'],  # Language preference, adjust as needed
             'quiet': True
