@@ -8,7 +8,36 @@ print(f"Cookies file path: {os.path.join(os.getcwd(), 'cookies.txt')}")
 print(f"Cookies file exists: {os.path.isfile(os.path.join(os.getcwd(), 'cookies.txt'))}")
 
 
+
+def load_and_check_cookies(cookies_path, test_url="https://www.youtube.com/"):
+    ydl_opts = {
+        'cookies': cookies_path,  # Load cookies from the specified file
+        'quiet': True,           # Reduce output verbosity
+    }
+    
+    try:
+        # Initialize YoutubeDL with cookies
+        with YoutubeDL(ydl_opts) as ydl:
+            # Test by extracting info about a video or the YouTube homepage
+            info = ydl.extract_info(test_url, download=False)
+            print("Cookies loaded successfully!")
+            print(f"Extracted Info: {info}")
+            return True
+    except Exception as e:
+        print(f"Failed to load cookies: {e}")
+        return False
+
+# Example usage
+cookies_file = "./cookies.txt"  # Path to your cookies.txt file
+if load_and_check_cookies(cookies_file):
+    print("Cookies are valid and loaded.")
+else:
+    print("Cookies are invalid or not loaded.")
+
 app = Flask(__name__)
+
+
+
 
 CORS(app, resources={r"/*": {"origins": "https://yt-video-downloder.netlify.app"}},supports_credentials=True)
 CORS(app)
