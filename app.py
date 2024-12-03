@@ -10,8 +10,8 @@ print(f"Cookies file exists: {os.path.isfile(os.path.join(os.getcwd(), 'cookies.
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {"origins": "https://yt-video-downloder.netlify.app"}})
-
+CORS(app, resources={r"/*": {"origins": "https://yt-video-downloder.netlify.app"}},supports_credentials=True)
+CORS(app)
 @app.route('/')
 def home():
     log_request()
@@ -21,6 +21,13 @@ def log_request():
     print(f"Received {request.method} request on {request.url}")
     print(f"Payload: {request.get_json()}")
 
+@app.route("/transcript", methods=["OPTIONS"])
+def handle_preflight():
+    response = jsonify({"message": "CORS preflight successful"})
+    response.headers.add("Access-Control-Allow-Origin", "https://yt-video-downloder.netlify.app")
+    response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    return response
 
 @app.route('/download', methods=['POST'])
 def download():
