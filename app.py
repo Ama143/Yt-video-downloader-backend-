@@ -5,7 +5,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 
 
-CORS(app, origins=["https://yt-video-downloder.netlify.app"])
+CORS(app)# origins=["https://yt-video-downloder.netlify.app"])
 
 @app.route('/')
 def home():
@@ -106,7 +106,7 @@ def download_video_section(url, start_time, end_time, output_file):
         return False
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(ydl_opts) as ydl:
             # First try to select the best format
             if select_best_format(ydl, url):
                 error_code = ydl.download([url])
@@ -125,7 +125,7 @@ def download_video_section(url, start_time, end_time, output_file):
             # If the first attempt fails, try with a simpler format
             ydl_opts['format'] = 'best'
             ydl_opts['format_sort'] = []
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with YoutubeDL(ydl_opts) as ydl:
                 error_code = ydl.download([url])
                 if error_code == 0:
                     messagebox.showinfo("Success", f"Video downloaded with fallback quality to {output_file}")
