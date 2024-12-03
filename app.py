@@ -9,7 +9,12 @@ CORS(app, origins=["https://yt-video-downloder.netlify.app"])
 
 @app.route('/')
 def home():
+    log_request()
     return "Welcome to the Video Downloader API! Use the endpoints /download or /transcript."
+@app.before_request
+def log_request():
+    print(f"Received {request.method} request on {request.url}")
+    print(f"Payload: {request.get_json()}")
 
 
 @app.route('/download', methods=['POST'])
