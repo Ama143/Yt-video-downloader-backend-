@@ -9,7 +9,7 @@ print(f"Cookies file exists: {os.path.isfile(os.path.join(os.getcwd(), 'cookies.
 
 
 
-def load_and_check_cookies(cookies_path, test_url="https://www.youtube.com/"):
+def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zToQkPR4PEg?si=Jf08HN2fzA-goctq"):
     ydl_opts = {
         'cookies': cookies_path,  # Load cookies from the specified file
         'quiet': True,           # Reduce output verbosity
