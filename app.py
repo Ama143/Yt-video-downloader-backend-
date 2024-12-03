@@ -4,11 +4,13 @@ from flask_cors import CORS
 import os
 print(f"Current directory: {os.getcwd()}")
 print(f"Cookies file exists: {os.path.isfile('./cookies.txt')}")
+print(f"Cookies file path: {os.path.join(os.getcwd(), 'cookies.txt')}")
+print(f"Cookies file exists: {os.path.isfile(os.path.join(os.getcwd(), 'cookies.txt'))}")
+
 
 app = Flask(__name__)
 
-
-CORS(app,origins=["https://yt-video-downloder.netlify.app"])
+CORS(app, resources={r"/*": {"origins": "https://yt-video-downloder.netlify.app"}})
 
 @app.route('/')
 def home():
@@ -59,7 +61,8 @@ def download_video_section(url, start_time, end_time, output_file):
     ydl_opts = {
         'format': '(bestvideo+bestaudio/best)[height>=?2160][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1440][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1080][fps>=?60]/bestvideo+bestaudio/best',
         'outtmpl': output_file,
-        'cookies': '/opt/render/project/src/cookies.txt',
+        'cookies': os.path.join(os.getcwd(), 'cookies.txt'),
+
         'cookies-from-browser':'chrome',
         'download_ranges': download_section(start_time, end_time),
         'merge_output_format': 'mp4',
@@ -152,7 +155,9 @@ def get_transcript():
 
 
             'writesubtitles': True,
-'cookies':'/opt/render/project/src/cookies.txt',
+            'cookies': os.path.join(os.getcwd(), 'cookies.txt'),
+
+            'cookies-from-browser':'chrome',
 
             'subtitleslangs': ['en'],  # Language preference, adjust as needed
             'quiet': True
