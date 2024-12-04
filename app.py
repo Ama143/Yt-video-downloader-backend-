@@ -8,11 +8,23 @@ print(f"Cookies file path: {os.path.join(os.getcwd(), 'cookies.txt')}")
 print(f"Cookies file exists: {os.path.isfile(os.path.join(os.getcwd(), 'cookies.txt'))}")
 
 
+# Define cookies as a dictionary
+cookies = {
+"SNID": "AFAt11qWl_H73Ljq6sp8y5GLz0rybgBzXC3tpHjQVbeQ3D1hgVbLoSa668BTHaJCqoC-qqKjTYQKpJeL58TasC0sIQONUPCB2d0", "VISITOR_INFO1_LIVE": "-s84k_h-fTE", "VISITOR_PRIVACY_METADATA": "CgJOUBIEGgAgNQ%3D%3D", "OTZ": "7848643_33_33__33_", "SID": "g.a000qwjxSD_40OJF2BpMrvEJs2V7d_E0PXp8syA1JriuGtte4QgzaTLi8Ir1Ul3SmMTNwAFUXAACgYKAZoSARUSFQHGX2MiGZdSb_8pwhVuxxcNoXv4WRoVAUF8yKorr7hlj3eaLxwADTyFPuc30076", "__Secure-1PSID": "g.a000qwjxSD_40OJF2BpMrvEJs2V7d_E0PXp8syA1JriuGtte4QgzHM_3P4vK5FoCxdUN9jHhSgACgYKASwSARUSFQHGX2MiYS9TkCSIfNUqNWTmwm3oBBoVAUF8yKoej9BIx3CZsv5Ol_puMwtQ0076", "__Secure-3PSID": "g.a000qwjxSD_40OJF2BpMrvEJs2V7d_E0PXp8syA1JriuGtte4QgzRrDnIx2nilIYDFfYeP66CwACgYKASoSARUSFQHGX2MirgmUabNJ0DamN69hgcUzvBoVAUF8yKoXx2cTTwHPB1kSHTh2-c990076", "HSID": "AfHgVLP9f9DoQsYsT", "SSID": "A4BQmgCVI_oed38ms", "APISID": "rjrksyLkMS3VBuMF/Ab9AG668X7N5ORSXt", "SAPISID": "12QjXKxEidIDCwcJ/A7xDSyKumVbDHboc2", "__Secure-1PAPISID": "12QjXKxEidIDCwcJ/A7xDSyKumVbDHboc2", "__Secure-3PAPISID": "12QjXKxEidIDCwcJ/A7xDSyKumVbDHboc2", "__Host-GAPS": "1:U_1TQY3hTcm1COhg8w96_sKQBMUPULHLL7GMmYsQOtSaxNcxRpnS7YI6po7CvlB9_15e6cb7_ewGhlub2deLJzupvHitIw:nu2QRAz-Q1XoZjyy", "ACCOUNT_CHOOSER": "AFx_qI7hAnQGXZ5j8qeOrPodqXuCc3XnkJwtoF28ZrXg9OsjmbfW4631-HjT_qpdeyNVx35aacqp8QakZPGCOOHviW7m-s-tLzy8VOZ7hm2FzzZ5jHpi0Y-FUEKkf3ZiYrqYmFbBZAvM", "OSID": "g.a000qwjxSGyQmRHGHArAqsIxRp3HJQ-RrOTLXvhrCbxbQFaX8KqRCRZy47maLewVDbWPECa_QgACgYKAe0SARUSFQHGX2MirjsyDZZOH0VxMnDx31RDGxoVAUF8yKoLVuoDD7bD8b8pF8H3a-uQ0076", "SEARCH_SAMESITE": "CgQI3JwB", "AEC": "AZ6Zc-VCDKH4nIWYqFa2xE98qUgf-5P1ERdSI-0FocRiy8DtRWH0bnSgxA", "LOGIN_INFO": "AFmmF2swRgIhAKxbk-xbVTIbIWnCf7UNMgb5N461rGYiriPeoD8LFiZnAiEA7nJ-9MPibWhX_9ItCyH4lCIHZgdoqc7R2AhuyQ9Do74:QUQ3MjNmdy01T1I3TG5fSEFOMWdwb09GT2FCcDBxT1VDc2paR01yUTBKTHFjRDZVXy1sNnpYQ2hrY3BYcVN4eERFLWtGdFkzRXVxeERLUzlsaGRoUlE4cEFONXRma1NNeWdxRXdEclZieC1hc1FWMjM3UG9DdmRuTF9EUjFp",
+ }
+
+
+
+# Convert cookies into a list of cookie strings
+cookie_list = [f"{key}={value}" for key, value in cookies.items()]
+cookie_string = "; ".join(cookie_list)
 
 def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zToQkPR4PEg?si=Jf08HN2fzA-goctq"):
     ydl_opts = {
         #'cookies': cookies_path,  # Load cookies from the specified file
-        'cookies-from-browser':'chrome',
+        'http_headers': {
+        'Cookie': cookie_string,  # Pass cookies as HTTP headers
+    },
         'quiet': True,           # Reduce output verbosity
     }
     
