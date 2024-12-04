@@ -21,7 +21,7 @@ cookie_string = "; ".join(cookie_list)
 
 def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zToQkPR4PEg?si=Jf08HN2fzA-goctq"):
     ydl_opts = {
-        #'cookies': cookies_path,  # Load cookies from the specified file
+        'cookiesfile': cookies_path,  # Load cookies from the specified file
         'http_headers': {
         'Cookie': cookie_string,  # Pass cookies as HTTP headers
     },
