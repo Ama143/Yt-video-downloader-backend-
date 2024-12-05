@@ -138,6 +138,7 @@ def download_video_section(url, start_time, end_time, output_file):
         ydl_opts = {
             'format': '(bestvideo+bestaudio/best)[height>=?2160][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1440][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1080][fps>=?60]/bestvideo+bestaudio/best',
             'outtmpl': os.path.join(DOWNLOADS_DIR, output_file),
+            'cookies': './cookies.txt',
             'quiet': False,
             'verbose': True,
             'no_warnings': False,
