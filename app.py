@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
 import yt_dlp
-from flask_cors import CORS
 import os
 import time
 
@@ -46,12 +45,25 @@ cookies_file = "./cookies.txt"  # Path to your cookies.txt file
 #
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {
-    "origins": ["https://yt-video-downloder.netlify.app", "http://localhost:3000"],
-    "supports_credentials": True,
-    "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type", "Authorization"]
-}})
+# Configure CORS
+ALLOWED_ORIGINS = ["https://yt-video-downloder.netlify.app", "http://localhost:3000"]
+
+@app.after_request
+def after_request(response):
+    origin = request.headers.get('Origin')
+    if origin in ALLOWED_ORIGINS:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+# Add a route to handle OPTIONS requests
+@app.route('/download', methods=['OPTIONS'])
+@app.route('/transcript', methods=['OPTIONS'])
+def handle_options():
+    response = jsonify({'status': 'ok'})
+    return response
 
 @app.route('/')
 def home():
@@ -62,14 +74,6 @@ def home():
 def log_request():
     print(f"Received {request.method} request on {request.url}")
     print(f"Payload: {request.get_json()}")
-
-@app.route("/transcript", methods=["OPTIONS"])
-def handle_preflight():
-    response = jsonify({"message": "CORS preflight successful"})
-    response.headers.add("Access-Control-Allow-Origin", "https://yt-video-downloder.netlify.app")
-    response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    return response
 
 @app.route('/check-cookies')
 def check_cookies():
@@ -94,6 +98,12 @@ def download():
         if not all([url, start, end]):
             return jsonify({"error": "Missing required parameters (url, start, end)"}), 400
 
+        # Log the request details
+        print(f"Processing download request - URL: {url}, Start: {start}, End: {end}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Cookies path: {COOKIES_PATH}")
+        print(f"Downloads directory: {DOWNLOADS_DIR}")
+
         start_time = time_to_seconds(start)
         end_time = time_to_seconds(end)
         output_file = f"clip_{start}_{end}.mp4"
@@ -104,8 +114,11 @@ def download():
             return jsonify({"message": result["message"], "file": output_file})
         else:
             return jsonify({"error": result["error"]}), 500
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_msg = f"Error processing request: {str(e)}"
+        print(error_msg)
+        return jsonify({"error": error_msg}), 500
 
 def time_to_seconds(time_str):
     try:
@@ -126,40 +139,60 @@ def download_section(start_time, end_time):
 # Function to download a specific section of the video
 def download_video_section(url, start_time, end_time, output_file):
     output_path = os.path.join(DOWNLOADS_DIR, output_file)
-    ydl_opts = {
-        'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
-        'outtmpl': output_path,
-        'cookies': COOKIES_PATH,
-        'download_ranges': download_section(start_time, end_time),
-        'merge_output_format': 'mp4',
-        'postprocessors': [{
-            'key': 'FFmpegVideoRemuxer',
-            'preferedformat': 'mp4',
-        }],
-        'no_warnings': True,
-        'ignoreerrors': True
-    }
+    
+    # Check if cookies file exists and log its status
+    cookies_exist = os.path.isfile(COOKIES_PATH)
+    print(f"Cookies status - Path: {COOKIES_PATH}, Exists: {cookies_exist}")
+    if not cookies_exist:
+        return {"success": False, "error": "Cookies file not found. Please ensure cookies.txt is properly uploaded."}
 
     try:
-        with YoutubeDL(ydl_opts) as ydl:
-            error_code = ydl.download([url])
-            if error_code != 0:
-                raise Exception("Download failed")
-            return {"success": True, "message": f"Video downloaded successfully", "path": output_path}
-    except Exception as e:
-        print(f"Download error: {str(e)}")
-        # Try with simpler format
+        # First try with cookies from file
+        ydl_opts = {
+            'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+            'outtmpl': output_path,
+            'cookies': COOKIES_PATH,
+            'download_ranges': download_section(start_time, end_time),
+            'merge_output_format': 'mp4',
+            'postprocessors': [{
+                'key': 'FFmpegVideoRemuxer',
+                'preferedformat': 'mp4',
+            }],
+            'no_warnings': False,  # Enable warnings for better debugging
+            'verbose': True,  # Enable verbose output
+        }
+
         try:
-            ydl_opts['format'] = 'best'
+            with YoutubeDL(ydl_opts) as ydl:
+                # First verify we can extract info
+                print("Attempting to extract video info...")
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    print("Video info extracted successfully, proceeding with download...")
+                    error_code = ydl.download([url])
+                    if error_code != 0:
+                        raise Exception("Download failed with error code: " + str(error_code))
+                    return {"success": True, "message": "Video downloaded successfully", "path": output_path}
+                else:
+                    raise Exception("Could not extract video info")
+
+        except Exception as e:
+            print(f"First attempt failed: {str(e)}")
+            # Try alternative method with browser cookies
+            ydl_opts['cookies_from_browser'] = 'chrome'
+            del ydl_opts['cookies']  # Remove file-based cookies
+            
+            print("Attempting second download with browser cookies...")
             with YoutubeDL(ydl_opts) as ydl:
                 error_code = ydl.download([url])
                 if error_code == 0:
-                    return {"success": True, "message": "Video downloaded with fallback quality", "path": output_path}
-                raise Exception("Fallback download failed")
-        except Exception as e2:
-            error_msg = f"Both download attempts failed. First error: {str(e)}, Second error: {str(e2)}"
-            print(error_msg)
-            return {"success": False, "error": error_msg}
+                    return {"success": True, "message": "Video downloaded with browser cookies", "path": output_path}
+                raise Exception("Both download methods failed")
+
+    except Exception as e:
+        error_msg = f"Download failed: {str(e)}"
+        print(error_msg)
+        return {"success": False, "error": error_msg}
 
 @app.route('/transcript', methods=['POST'])
 def get_transcript():
