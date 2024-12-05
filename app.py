@@ -46,11 +46,11 @@ def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zT
 
 # Example usage
 cookies_file = "./cookies.txt"  # Path to your cookies.txt file
-#if load_and_check_cookies(cookies_file):
-#    print("Cookies are valid and loaded.")
-#else:
-#    print("Cookies are invalid or not loaded.")
-#
+if load_and_check_cookies(cookies_file):
+    print("Cookies are valid and loaded.")
+else:
+    print("Cookies are invalid or not loaded.")
+
 app = Flask(__name__)
 
 # Configure CORS
