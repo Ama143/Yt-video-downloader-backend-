@@ -29,7 +29,7 @@ def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zT
     ydl_opts = {
         'cookies': cookies_path,  # Load cookies from the specified file
         #'cookies-from-browser':'chrome',
-        'quiet': True,           # Reduce output verbosity
+                   # Reduce output verbosity
     }
     
     try:
