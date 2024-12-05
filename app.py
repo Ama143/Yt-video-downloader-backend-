@@ -15,16 +15,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Near the top of your file, add:
-COOKIES_PATH = os.environ.get('COOKIES_PATH', os.path.join(os.getcwd(), 'cookies.txt'))
 DOWNLOADS_DIR = os.environ.get('DOWNLOADS_DIR', os.path.join(os.getcwd(), 'downloads'))
 
 # Create downloads directory if it doesn't exist
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 print(f"Current directory: {os.getcwd()}")
-print(f"Cookies file exists: {os.path.isfile('./cookies.txt')}")
-print(f"Cookies file path: {os.path.join(os.getcwd(), 'cookies.txt')}")
-print(f"Cookies file exists: {os.path.isfile(os.path.join(os.getcwd(), 'cookies.txt'))}")
+print(f"Downloads directory: {DOWNLOADS_DIR}")
 
 
 def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zToQkPR4PEg?si=Jf08HN2fzA-goctq"):
@@ -117,8 +114,6 @@ def log_request():
 @app.route('/check-cookies')
 def check_cookies():
     return jsonify({
-        'cookies_path': COOKIES_PATH,
-        'cookies_exist': os.path.isfile(COOKIES_PATH),
         'current_directory': os.getcwd(),
         'downloads_directory': DOWNLOADS_DIR
     })
@@ -161,7 +156,7 @@ def download():
         result = download_video_section(url, start_time, end_time, output_file)
         
         if result["success"]:
-            response = jsonify({"message": result["message"], "file": output_file})
+            response = jsonify({"message": result["message"], "file": output_file, "quality": result["quality"]})
             return add_cors_headers(response), 200
         else:
             response = jsonify({"error": result["error"]})
@@ -179,111 +174,122 @@ def time_to_seconds(time_str):
     except ValueError:
         raise ValueError("Invalid time format. Please use 'HH:MM:SS'.")
 
-def download_section(start_time, end_time):
-    def download_ranges(info_dict, ydl):
-        return [{
-            'start_time': start_time,
-            'end_time': end_time,
-            'title': 'jreclip'
-        }]
-    return download_ranges
-
-# Function to download a specific section of the video
 def download_video_section(url, start_time, end_time, output_file):
-    output_path = os.path.join(DOWNLOADS_DIR, output_file)
-    
-    # Check if cookies file exists and log its status
-    cookies_exist = os.path.isfile(COOKIES_PATH)
-    print(f"Cookies status - Path: {COOKIES_PATH}, Exists: {cookies_exist}")
-    if not cookies_exist:
-        return {"success": False, "error": "Cookies file not found. Please ensure cookies.txt is properly uploaded."}
-
     try:
-        # Configure yt-dlp with more browser-like behavior
         ydl_opts = {
-            'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
-            'outtmpl': output_path,
-            'cookies': COOKIES_PATH,
-            'download_ranges': download_section(start_time, end_time),
-            'merge_output_format': 'mp4',
-            'postprocessors': [{
-                'key': 'FFmpegVideoRemuxer',
-                'preferedformat': 'mp4',
-            }],
-            'no_warnings': False,
+            'format': '(bestvideo+bestaudio/best)[height>=?2160][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1440][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1080][fps>=?60]/bestvideo+bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOADS_DIR, output_file),
+            'quiet': False,
             'verbose': True,
-            'socket_timeout': 30,
+            'no_warnings': False,
+            'nocheckcertificate': True,
+            'extract_flat': False,
+            'ignoreerrors': True,
+            'no_color': True,
+            'noprogress': True,
+            'no_check_certificate': True,
+            'prefer_insecure': True,
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
+                'Accept-Encoding': 'gzip, deflate',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'TE': 'trailers'
-            }
+                'Sec-Fetch-User': '?1'
+            },
+            'postprocessors': [{
+                'key': 'FFmpegVideoRemuxer',
+                'preferedformat': 'mp4',
+            }]
         }
 
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                print("Attempting to extract video info...")
-                info = ydl.extract_info(url, download=False)
-                if info:
-                    print("Video info extracted successfully, proceeding with download...")
-                    # Try to extract the direct video URL first
-                    formats = info.get('formats', [])
-                    if formats:
-                        # Filter for desired quality
-                        suitable_formats = [f for f in formats 
-                                         if f.get('height', 0) <= 1080 
-                                         and f.get('acodec') != 'none' 
-                                         and f.get('vcodec') != 'none']
-                        if suitable_formats:
-                            # Sort by quality (height)
-                            suitable_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
-                            chosen_format = suitable_formats[0]
-                            ydl_opts['format'] = chosen_format['format_id']
-                            print(f"Selected format: {chosen_format.get('format')} ({chosen_format.get('height')}p)")
-                    
-                    error_code = ydl.download([url])
-                    if error_code != 0:
-                        raise Exception("Download failed with error code: " + str(error_code))
-                    return {"success": True, "message": "Video downloaded successfully", "path": output_path}
-                else:
-                    raise Exception("Could not extract video info")
+        # Remove any existing cookie files or settings
+        if 'cookiefile' in ydl_opts:
+            del ydl_opts['cookiefile']
+        if 'cookiesfrombrowser' in ydl_opts:
+            del ydl_opts['cookiesfrombrowser']
 
-        except Exception as e:
-            print(f"First attempt failed: {str(e)}")
-            # Try alternative method with browser cookies
+        def download_ranges(info_dict, ydl):
+            return [[start_time, end_time]]
+
+        ydl_opts['download_ranges'] = download_ranges
+
+        with YoutubeDL(ydl_opts) as ydl:
             try:
+                print(f"Attempting to download video: {url}")
+                print("Attempting to extract video in highest quality (up to 4K 60fps)...")
+                info = ydl.extract_info(url, download=True)
+                if info:
+                    quality = info.get('height', 'unknown')
+                    fps = info.get('fps', 'unknown')
+                    format_note = info.get('format_note', '')
+                    print(f"Successfully downloaded: {quality}p {fps}fps {format_note}")
+                    return {
+                        "success": True,
+                        "message": f"Successfully downloaded video section in {quality}p {fps}fps {format_note}",
+                        "title": info.get('title', 'Unknown'),
+                        "quality": f"{quality}p {fps}fps {format_note}"
+                    }
+                else:
+                    raise Exception("Failed to extract video information")
+            except Exception as e:
+                print(f"First attempt failed: {str(e)}")
                 print("Attempting download with alternative method...")
-                ydl_opts.update({
-                    'format': 'best[height<=1080]',
-                    'cookies_from_browser': 'chrome',
-                    'cookiesfrombrowser': ('chrome',),  # Add both formats for compatibility
-                })
-                if 'cookies' in ydl_opts:
-                    del ydl_opts['cookies']
-                
-                with YoutubeDL(ydl_opts) as ydl:
-                    error_code = ydl.download([url])
-                    if error_code == 0:
-                        return {"success": True, "message": "Video downloaded with browser cookies", "path": output_path}
-                    raise Exception("Alternative download method failed")
-            except Exception as e2:
-                error_msg = f"Both download methods failed. Error: {str(e2)}"
-                print(error_msg)
-                return {"success": False, "error": error_msg}
+                try:
+                    # Try with different format but still high quality
+                    ydl_opts['format'] = '(bestvideo+bestaudio/best)[height>=?1080]/bestvideo+bestaudio/best'
+                    with YoutubeDL(ydl_opts) as alt_ydl:
+                        info = alt_ydl.extract_info(url, download=True)
+                        if info:
+                            quality = info.get('height', 'unknown')
+                            fps = info.get('fps', 'unknown')
+                            format_note = info.get('format_note', '')
+                            print(f"Successfully downloaded (alternative): {quality}p {fps}fps {format_note}")
+                            return {
+                                "success": True,
+                                "message": f"Successfully downloaded video in {quality}p {fps}fps {format_note} (alternative method)",
+                                "title": info.get('title', 'Unknown'),
+                                "quality": f"{quality}p {fps}fps {format_note}"
+                            }
+                        else:
+                            raise Exception("Failed to extract video information with alternative method")
+                except Exception as alt_e:
+                    print(f"Alternative method failed: {str(alt_e)}")
+                    # Final attempt with simpler format
+                    try:
+                        ydl_opts['format'] = 'bestvideo+bestaudio/best'
+                        with YoutubeDL(ydl_opts) as final_ydl:
+                            info = final_ydl.extract_info(url, download=True)
+                            if info:
+                                quality = info.get('height', 'unknown')
+                                fps = info.get('fps', 'unknown')
+                                format_note = info.get('format_note', '')
+                                print(f"Successfully downloaded (final): {quality}p {fps}fps {format_note}")
+                                return {
+                                    "success": True,
+                                    "message": f"Successfully downloaded video in {quality}p {fps}fps {format_note} (final method)",
+                                    "title": info.get('title', 'Unknown'),
+                                    "quality": f"{quality}p {fps}fps {format_note}"
+                                }
+                            else:
+                                raise Exception("All download methods failed")
+                    except Exception as final_e:
+                        print(f"Final attempt failed: {str(final_e)}")
+                        raise
 
     except Exception as e:
-        error_msg = f"Download failed: {str(e)}"
-        print(error_msg)
-        return {"success": False, "error": error_msg}
+        error_msg = str(e)
+        print(f"Download error: {error_msg}")
+        return {
+            "success": False,
+            "error": f"Failed to download video: {error_msg}"
+        }
 
 @app.route('/transcript', methods=['POST'])
 def get_transcript():
@@ -296,9 +302,7 @@ def get_transcript():
 
 
             'writesubtitles': True,
-            'cookies': COOKIES_PATH,
 
-            
 
             'subtitleslangs': ['en'],  # Language preference, adjust as needed
             'quiet': True
