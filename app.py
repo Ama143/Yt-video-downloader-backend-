@@ -1,8 +1,18 @@
 from flask import Flask, request, jsonify, make_response
+import logging
+import sys
 from yt_dlp import YoutubeDL
 import yt_dlp
 import os
 import time
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 # Near the top of your file, add:
 COOKIES_PATH = os.environ.get('COOKIES_PATH', os.path.join(os.getcwd(), 'cookies.txt'))
@@ -48,27 +58,51 @@ app = Flask(__name__)
 # Configure CORS
 ALLOWED_ORIGINS = ["https://yt-video-downloder.netlify.app", "http://localhost:3000"]
 
+# Basic health check endpoint
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "healthy"}), 200
+
+# Simplified CORS handling
+def add_cors_headers(response, methods=['GET', 'POST', 'OPTIONS']):
+    origin = request.headers.get('Origin')
+    if origin in ALLOWED_ORIGINS:
+        response.headers.update({
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods': ', '.join(methods),
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '3600'  # Cache preflight requests
+        })
+    return response
+
 @app.before_request
 def handle_preflight():
-    if request.method == "OPTIONS":
+    if request.method == 'OPTIONS':
         response = make_response()
-        origin = request.headers.get('Origin')
-        if origin in ALLOWED_ORIGINS:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-            response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
+        add_cors_headers(response)
         return response, 200
 
 @app.after_request
 def after_request(response):
-    origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
+    return add_cors_headers(response)
+
+# Error handlers
+@app.errorhandler(415)
+def unsupported_media_type(error):
+    response = jsonify({
+        "error": "Unsupported Media Type",
+        "message": "Content-Type must be application/json"
+    })
+    return add_cors_headers(response), 415
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    response = jsonify({
+        "error": "Internal Server Error",
+        "message": str(error)
+    })
+    return add_cors_headers(response), 500
 
 @app.route('/')
 def home():
@@ -91,55 +125,52 @@ def check_cookies():
 
 @app.route('/download', methods=['POST', 'OPTIONS'])
 def download():
-    # Handle preflight request
-    if request.method == "OPTIONS":
+    if request.method == 'OPTIONS':
         response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response, 200
-        
+        return add_cors_headers(response), 200
+
     try:
-        # Check content type for actual requests
-        if request.method == "POST":
-            if not request.is_json:
-                return jsonify({"error": "Content-Type must be application/json"}), 415
-            
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "No JSON data received"}), 400
-            
-            url = data.get('url')
-            start = data.get('start')
-            end = data.get('end')
-            
-            if not all([url, start, end]):
-                return jsonify({"error": "Missing required parameters (url, start, end)"}), 400
+        # Log request details
+        logger.info(f"Received download request from: {request.headers.get('Origin')}")
+        logger.info(f"Request headers: {dict(request.headers)}")
 
-            # Log the request details
-            print(f"Processing download request - URL: {url}, Start: {start}, End: {end}")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Cookies path: {COOKIES_PATH}")
-            print(f"Downloads directory: {DOWNLOADS_DIR}")
+        if not request.is_json:
+            logger.warning(f"Invalid content type: {request.content_type}")
+            return jsonify({
+                "error": "Content-Type must be application/json",
+                "received": request.content_type
+            }), 415
 
-            start_time = time_to_seconds(start)
-            end_time = time_to_seconds(end)
-            output_file = f"clip_{start}_{end}.mp4"
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
 
-            result = download_video_section(url, start_time, end_time, output_file)
-            
-            if result["success"]:
-                response = jsonify({"message": result["message"], "file": output_file})
-            else:
-                response = jsonify({"error": result["error"]}), 500
+        url = data.get('url')
+        start = data.get('start')
+        end = data.get('end')
 
-            return response
+        if not all([url, start, end]):
+            return jsonify({"error": "Missing required parameters (url, start, end)"}), 400
+
+        logger.info(f"Processing download - URL: {url}, Start: {start}, End: {end}")
+        
+        start_time = time_to_seconds(start)
+        end_time = time_to_seconds(end)
+        output_file = f"clip_{start}_{end}.mp4"
+
+        result = download_video_section(url, start_time, end_time, output_file)
+        
+        if result["success"]:
+            response = jsonify({"message": result["message"], "file": output_file})
+            return add_cors_headers(response), 200
+        else:
+            response = jsonify({"error": result["error"]})
+            return add_cors_headers(response), 500
 
     except Exception as e:
-        error_msg = f"Error processing request: {str(e)}"
-        print(error_msg)
-        return jsonify({"error": error_msg}), 500
+        logger.error(f"Download error: {str(e)}", exc_info=True)
+        response = jsonify({"error": f"Server error: {str(e)}"})
+        return add_cors_headers(response), 500
 
 def time_to_seconds(time_str):
     try:
