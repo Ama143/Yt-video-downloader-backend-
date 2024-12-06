@@ -130,7 +130,25 @@ USER_AGENTS = [
 import subprocess
 
 
-app = Flask(__name__)
+
+
+
+
+
+    
+
+
+
+
+
+
+def time_to_seconds(time_str):
+    try:
+        hours, minutes, seconds = map(int, time_str.split(':'))
+        return hours * 3600 + minutes * 60 + seconds
+    except ValueError:
+        raise ValueError("Invalid time format. Please use 'HH:MM:SS'.")
+
 
 @app.route('/download', methods=['POST'])
 def download_section():
@@ -159,20 +177,10 @@ def download_section():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True)
 
 
 
 
-
-
-def time_to_seconds(time_str):
-    try:
-        hours, minutes, seconds = map(int, time_str.split(':'))
-        return hours * 3600 + minutes * 60 + seconds
-    except ValueError:
-        raise ValueError("Invalid time format. Please use 'HH:MM:SS'.")
 
 def download_video_section(url, start_time, end_time, output_file):
     try:
