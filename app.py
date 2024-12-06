@@ -126,6 +126,47 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0'
 ]
 
+
+import subprocess
+
+
+app = Flask(__name__)
+
+@app.route('/download', methods=['POST'])
+def download_section():
+    data = request.json
+    url = data.get('url')
+    start = data.get('start')
+    end= data.get('end')
+    start_time = time_to_seconds(start)
+        end_time = time_to_seconds(end)
+        output_file = os.path.join(DOWNLOADS_DIR, output_file)
+    
+    if not url or not start_time or not end_time:
+        return jsonify({'error': 'Missing parameters'}), 400
+
+    output_path = "output.mp4"
+    command = [
+        'yt-dlp', url,
+        '--downloader', 'ffmpeg',
+        '--downloader-args', f'"-ss {start_time} -to {end_time}"',
+        '-o', output_path
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        return jsonify({'message': 'Download complete', 'file': output_path})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+
+
+
+
 def time_to_seconds(time_str):
     try:
         hours, minutes, seconds = map(int, time_str.split(':'))
@@ -275,7 +316,7 @@ def download_video_section(url, start_time, end_time, output_file):
             "error": f"Failed to download video: {error_msg}"
         }
 
-@app.route('/download', methods=['POST', 'OPTIONS'])
+@app.route('/downloads', methods=['POST', 'OPTIONS'])
 def download():
     if request.method == 'OPTIONS':
         response = make_response()
