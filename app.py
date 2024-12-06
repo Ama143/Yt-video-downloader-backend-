@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, make_response
+?from flask import Flask, request, jsonify, make_response
 import logging
 import sys
 from yt_dlp import YoutubeDL
@@ -157,8 +157,8 @@ def download_section():
     startt = data.get('start')
     endd = data.get('end')
     start_time = time_to_seconds(startt)
-        end_time = time_to_seconds(endd)
-        output_file = os.path.join(DOWNLOADS_DIR, output_file)
+    end_time = time_to_seconds(endd)
+    output_file = os.path.join(DOWNLOADS_DIR, output_file)
     
     if not url or not start_time or not end_time:
         return jsonify({'error': 'Missing parameters'}), 400
