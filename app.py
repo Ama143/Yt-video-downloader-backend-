@@ -154,10 +154,10 @@ def time_to_seconds(time_str):
 def download_section():
     data = request.json
     url = data.get('url')
-    start = data.get('start')
-    end= data.get('end')
-    start_time = time_to_seconds(start)
-        end_time = time_to_seconds(end)
+    startt = data.get('start')
+    endd = data.get('end')
+    start_time = time_to_seconds(startt)
+        end_time = time_to_seconds(endd)
         output_file = os.path.join(DOWNLOADS_DIR, output_file)
     
     if not url or not start_time or not end_time:
