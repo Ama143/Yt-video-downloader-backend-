@@ -197,63 +197,72 @@ def download_section():
         output_file = f"clip_{timestamp}.mp4"
         full_output_path = os.path.join(DOWNLOADS_DIR, output_file)
 
-        # Enhanced yt-dlp options for bot detection bypass
+        # Enhanced yt-dlp options with age verification bypass
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'outtmpl': full_output_path,
             'quiet': False,
             'no_warnings': False,
-            'extract_flat': False,
+            'age_limit': 0,  # Bypass age verification
+            'extract_flat': True,
             'nocheckcertificate': True,
-            'ignoreerrors': False,
+            'ignoreerrors': True,
             'no_check_certificate': True,
             'prefer_insecure': True,
             'geo_bypass': True,
             'geo_bypass_country': 'US',
-            'socket_timeout': 20,
-            'retries': 10,
-            'fragment_retries': 10,
+            'socket_timeout': 30,
+            'retries': 20,
+            'fragment_retries': 20,
             'http_headers': {
-                'User-Agent': random.choice(USER_AGENTS),
+                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'DNT': '1',
-                'Connection': 'keep-alive',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate'
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android'],
-                    'player_skip': ['webpage', 'configs'],
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['configs', 'webpage'],
+                    'skip': ['hls', 'dash', 'translated_subs']
                 }
+            },
+            'postprocessor_args': {
+                'ffmpeg': ['-ss', str(start_time), '-t', str(end_time - start_time)]
             }
         }
-
-        # Add timestamp range for download
-        def download_range_func(info_dict):
-            return [[start_time, end_time]]
-        
-        ydl_opts['download_ranges'] = download_range_func
 
         with YoutubeDL(ydl_opts) as ydl:
             try:
                 logger.info(f"Attempting to download video: {url}")
-                info = ydl.extract_info(url, download=True)
+                # First try with flat extraction
+                info = ydl.extract_info(url, download=False)
                 
                 if not info:
                     raise Exception("Failed to extract video information")
+
+                # Then download with the best format
+                ydl_opts['extract_flat'] = False
+                ydl_opts['format'] = 'best[ext=mp4]/best'
+                
+                with YoutubeDL(ydl_opts) as dl_ydl:
+                    dl_info = dl_ydl.extract_info(url, download=True)
                 
                 return jsonify({
                     'message': 'Download complete',
                     'file': output_file,
                     'path': full_output_path,
-                    'quality': f"{info.get('height', 'unknown')}p",
+                    'quality': f"{dl_info.get('height', 'unknown')}p",
                     'title': video_info['title'],
                     'channel': video_info['channel']
                 })
+
             except Exception as e:
+                logger.error(f"Download failed: {str(e)}")
                 # Try alternative format if first attempt fails
-                ydl_opts['format'] = 'best[ext=mp4]/best'
+                ydl_opts['format'] = '(mp4)[height<=720]/best[ext=mp4]/best'
+                ydl_opts['extract_flat'] = False
+                
                 with YoutubeDL(ydl_opts) as alt_ydl:
                     info = alt_ydl.extract_info(url, download=True)
                     if info:
