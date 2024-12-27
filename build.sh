@@ -4,10 +4,23 @@ set -o errexit
 
 echo "Starting build process..."
 
+# Load environment variables if .env exists
+if [ -f .env ]; then
+    export $(cat .env | xargs)
+    echo "Loaded environment variables"
+fi
+
+# Add environment variable check
+if [ -z "$YOUTUBE_API_KEY" ]; then
+    echo "Warning: YOUTUBE_API_KEY is not set!"
+fi
+
 # Install system dependencies
 echo "Installing system dependencies..."
 apt-get update && apt-get install -y \
     chromium-browser \
+    firefox-esr \
+    microsoft-edge-stable \
     ffmpeg \
     python3-pip \
     python3-venv

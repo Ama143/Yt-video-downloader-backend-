@@ -6,6 +6,10 @@ import yt_dlp
 import os
 import time
 import random
+import browser_cookie3
+import tempfile
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +28,10 @@ os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 print(f"Current directory: {os.getcwd()}")
 print(f"Downloads directory: {DOWNLOADS_DIR}")
 
+# Add after other configuration
+YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY')
+if not YOUTUBE_API_KEY:
+    logger.warning("YouTube API key not found in environment variables!")
 
 def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zToQkPR4PEg?si=Jf08HN2fzA-goctq"):
     ydl_opts = {
@@ -150,6 +158,52 @@ def time_to_seconds(time_str):
         raise ValueError("Invalid time format. Please use 'HH:MM:SS'.")
 
 
+def get_video_info(video_id):
+    try:
+        youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
+        
+        # Get video details
+        request = youtube.videos().list(
+            part="snippet,contentDetails,status",
+            id=video_id
+        )
+        response = request.execute()
+
+        if not response['items']:
+            raise Exception("Video not found or is private")
+
+        video = response['items'][0]
+        
+        # Check if video is downloadable
+        if video['status']['privacyStatus'] == 'private':
+            raise Exception("This video is private")
+        if video['status'].get('embeddable') is False:
+            raise Exception("This video cannot be embedded")
+
+        return {
+            'title': video['snippet']['title'],
+            'description': video['snippet']['description'],
+            'channel': video['snippet']['channelTitle'],
+            'duration': video['contentDetails']['duration']
+        }
+    except HttpError as e:
+        logger.error(f"YouTube API error: {str(e)}")
+        raise Exception(f"YouTube API error: {str(e)}")
+
+def extract_video_id(url):
+    """Extract video ID from YouTube URL"""
+    import re
+    patterns = [
+        r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
+        r'(?:embed\/)([0-9A-Za-z_-]{11})',
+        r'(?:shorts\/)([0-9A-Za-z_-]{11})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    raise ValueError("Invalid YouTube URL")
+
 @app.route('/download', methods=['POST'])
 def download_section():
     data = request.json
@@ -161,33 +215,44 @@ def download_section():
         return jsonify({'error': 'Missing parameters'}), 400
 
     try:
+        # Extract video ID and get info from YouTube API
+        video_id = extract_video_id(url)
+        video_info = get_video_info(video_id)
+        
         start_time = time_to_seconds(startt)
         end_time = time_to_seconds(endd)
         
-        # Define output_file before using it
         timestamp = int(time.time())
         output_file = f"clip_{timestamp}.mp4"
         full_output_path = os.path.join(DOWNLOADS_DIR, output_file)
 
-        command = [
-            'yt-dlp', url,
-            '--downloader', 'ffmpeg',
-            '--downloader-args', f'"-ss {start_time} -to {end_time}"',
-            '-o', full_output_path
-        ]
+        ydl_opts = {
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'outtmpl': full_output_path,
+            'quiet': False,
+            'verbose': True,
+            'no_warnings': False,
+            'fragment_retries': 10,
+            'retries': 10,
+            'download_ranges': lambda info: [[start_time, end_time]],
+        }
 
-        subprocess.run(command, check=True)
-        return jsonify({
-            'message': 'Download complete', 
-            'file': output_file,
-            'path': full_output_path
-        })
-    except ValueError as ve:
-        return jsonify({'error': str(ve)}), 400
-    except subprocess.CalledProcessError as e:
-        return jsonify({'error': f'Download failed: {str(e)}'}), 500
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            
+            return jsonify({
+                'message': 'Download complete',
+                'file': output_file,
+                'path': full_output_path,
+                'quality': f"{info.get('height', 'unknown')}p",
+                'title': video_info['title'],
+                'channel': video_info['channel']
+            })
+
     except Exception as e:
-        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+        error_msg = str(e)
+        logger.error(f"Download error: {error_msg}")
+        return jsonify({'error': f'Download failed: {error_msg}'}), 500
 
 def download_video_section(url, start_time, end_time, output_file, cookie_file):
     try:
