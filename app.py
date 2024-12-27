@@ -2,12 +2,9 @@ from flask import Flask, request, jsonify, make_response
 import logging
 import sys
 from yt_dlp import YoutubeDL
-import yt_dlp
 import os
 import time
 import random
-import browser_cookie3
-import tempfile
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -32,32 +29,6 @@ print(f"Downloads directory: {DOWNLOADS_DIR}")
 YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY')
 if not YOUTUBE_API_KEY:
     logger.warning("YouTube API key not found in environment variables!")
-
-def load_and_check_cookies(cookies_path, test_url="https://youtube.com/shorts/zToQkPR4PEg?si=Jf08HN2fzA-goctq"):
-    ydl_opts = {
-        'cookies': cookies_path,  # Load cookies from the specified file
-        #'cookies-from-browser':'chrome',
-                   # Reduce output verbosity
-    }
-    
-    try:
-        # Initialize YoutubeDL with cookies
-        with YoutubeDL(ydl_opts) as ydl:
-            # Test by extracting info about a video or the YouTube homepage
-            info = ydl.extract_info(test_url, download=False)
-            print("Cookies loaded successfully!")
-            print(f"Extracted Info: {info}")
-            return True
-    except Exception as e:
-        print(f"Failed to load cookies: {e}")
-        return False
-
-# Example usage
-cookies_file = "./cookies.txt"  # Path to your cookies.txt file
-if load_and_check_cookies(cookies_file):
-    print("Cookies are valid and loaded.")
-else:
-    print("Cookies are invalid or not loaded.")
 
 app = Flask(__name__)
 
@@ -235,6 +206,9 @@ def download_section():
             'fragment_retries': 10,
             'retries': 10,
             'download_ranges': lambda info: [[start_time, end_time]],
+            'http_headers': {
+                'User-Agent': random.choice(USER_AGENTS)
+            }
         }
 
         with YoutubeDL(ydl_opts) as ydl:
