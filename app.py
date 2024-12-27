@@ -182,12 +182,12 @@ def download_section():
 
 
 
-def download_video_section(url, start_time, end_time, output_file):
+def download_video_section(url, start_time, end_time, output_file, cookie_file):
     try:
         ydl_opts = {
             'format': '(bestvideo+bestaudio/best)[height>=?2160][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1440][fps>=?60]/(bestvideo+bestaudio/best)[height>=?1080][fps>=?60]/bestvideo+bestaudio/best',
             'outtmpl': os.path.join(DOWNLOADS_DIR, output_file),
-            'cookies': './cookies.txt',
+            'cookies': cookie_file,  # Use the provided cookie file
             'quiet': False,
             'verbose': True,
             'no_warnings': False,
@@ -349,9 +349,15 @@ def download():
         url = data.get('url')
         start = data.get('start')
         end = data.get('end')
+        cookies_data = data.get('cookies')  # Get cookies from request
 
-        if not all([url, start, end]):
-            return jsonify({"error": "Missing required parameters (url, start, end)"}), 400
+        if not all([url, start, end, cookies_data]):
+            return jsonify({"error": "Missing required parameters (url, start, end, cookies)"}), 400
+
+        # Create a temporary cookies file
+        temp_cookie_file = os.path.join(DOWNLOADS_DIR, f'cookies_{int(time.time())}.txt')
+        with open(temp_cookie_file, 'w') as f:
+            f.write(cookies_data)
 
         logger.info(f"Processing download - URL: {url}, Start: {start}, End: {end}")
         
@@ -359,8 +365,15 @@ def download():
         end_time = time_to_seconds(end)
         output_file = f"clip_{start}_{end}.mp4"
 
-        result = download_video_section(url, start_time, end_time, output_file)
+        # Modify ydl_opts in download_video_section to use the temporary cookie file
+        result = download_video_section(url, start_time, end_time, output_file, temp_cookie_file)
         
+        # Clean up temporary cookie file
+        try:
+            os.remove(temp_cookie_file)
+        except:
+            pass
+
         if result["success"]:
             response = jsonify({"message": result["message"], "file": output_file, "quality": result["quality"]})
             return add_cors_headers(response), 200
