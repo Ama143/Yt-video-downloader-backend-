@@ -156,31 +156,38 @@ def download_section():
     url = data.get('url')
     startt = data.get('start')
     endd = data.get('end')
-    start_time = time_to_seconds(startt)
-    end_time = time_to_seconds(endd)
-    output_file = os.path.join(DOWNLOADS_DIR, output_file)
     
-    if not url or not start_time or not end_time:
+    if not url or not startt or not endd:
         return jsonify({'error': 'Missing parameters'}), 400
 
-    output_path = "output.mp4"
-    command = [
-        'yt-dlp', url,
-        '--downloader', 'ffmpeg',
-        '--downloader-args', f'"-ss {start_time} -to {end_time}"',
-        '-o', output_path
-    ]
-
     try:
+        start_time = time_to_seconds(startt)
+        end_time = time_to_seconds(endd)
+        
+        # Define output_file before using it
+        timestamp = int(time.time())
+        output_file = f"clip_{timestamp}.mp4"
+        full_output_path = os.path.join(DOWNLOADS_DIR, output_file)
+
+        command = [
+            'yt-dlp', url,
+            '--downloader', 'ffmpeg',
+            '--downloader-args', f'"-ss {start_time} -to {end_time}"',
+            '-o', full_output_path
+        ]
+
         subprocess.run(command, check=True)
-        return jsonify({'message': 'Download complete', 'file': output_path})
+        return jsonify({
+            'message': 'Download complete', 
+            'file': output_file,
+            'path': full_output_path
+        })
+    except ValueError as ve:
+        return jsonify({'error': str(ve)}), 400
+    except subprocess.CalledProcessError as e:
+        return jsonify({'error': f'Download failed: {str(e)}'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-
-
-
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
 def download_video_section(url, start_time, end_time, output_file, cookie_file):
     try:
