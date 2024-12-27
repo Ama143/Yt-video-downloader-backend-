@@ -7,6 +7,8 @@ import time
 import random
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import subprocess
+import shlex
 
 # Configure logging
 logging.basicConfig(
@@ -186,7 +188,6 @@ def download_section():
         return jsonify({'error': 'Missing parameters'}), 400
 
     try:
-        # Extract video ID and get info from YouTube API
         video_id = extract_video_id(url)
         video_info = get_video_info(video_id)
         
@@ -194,87 +195,105 @@ def download_section():
         end_time = time_to_seconds(endd)
         
         timestamp = int(time.time())
-        output_file = f"clip_{timestamp}.mp4"
-        full_output_path = os.path.join(DOWNLOADS_DIR, output_file)
+        temp_output = f"temp_{timestamp}.mp4"
+        final_output = f"clip_{timestamp}.mp4"
+        temp_path = os.path.join(DOWNLOADS_DIR, temp_output)
+        final_path = os.path.join(DOWNLOADS_DIR, final_output)
 
-        # Enhanced yt-dlp options with age verification bypass
+        # Step 1: Download full quality video
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'outtmpl': full_output_path,
-            'quiet': False,
-            'no_warnings': False,
-            'age_limit': 0,  # Bypass age verification
-            'extract_flat': True,
-            'nocheckcertificate': True,
-            'ignoreerrors': True,
-            'no_check_certificate': True,
-            'prefer_insecure': True,
-            'geo_bypass': True,
-            'geo_bypass_country': 'US',
-            'socket_timeout': 30,
-            'retries': 20,
-            'fragment_retries': 20,
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4][height>=1080]',
+            'outtmpl': temp_path,
+            'quiet': True,
+            'no_warnings': True,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web'],
-                    'player_skip': ['configs', 'webpage'],
-                    'skip': ['hls', 'dash', 'translated_subs']
-                }
-            },
-            'postprocessor_args': {
-                'ffmpeg': ['-ss', str(start_time), '-t', str(end_time - start_time)]
-            }
         }
 
-        with YoutubeDL(ydl_opts) as ydl:
-            try:
-                logger.info(f"Attempting to download video: {url}")
-                # First try with flat extraction
-                info = ydl.extract_info(url, download=False)
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
                 
-                if not info:
-                    raise Exception("Failed to extract video information")
+                # Step 2: Use FFmpeg for precise trimming
+                trim_command = [
+                    'ffmpeg', '-i', temp_path,
+                    '-ss', str(start_time),
+                    '-t', str(end_time - start_time),
+                    '-c:v', 'libx264', '-c:a', 'aac',
+                    '-preset', 'fast', '-crf', '22',
+                    '-y', final_path
+                ]
+                
+                process = subprocess.run(
+                    trim_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
 
-                # Then download with the best format
-                ydl_opts['extract_flat'] = False
-                ydl_opts['format'] = 'best[ext=mp4]/best'
-                
-                with YoutubeDL(ydl_opts) as dl_ydl:
-                    dl_info = dl_ydl.extract_info(url, download=True)
-                
+                # Clean up temporary file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+                if process.returncode != 0:
+                    raise Exception(f"FFmpeg error: {process.stderr.decode()}")
+
+                quality = info.get('height', 'unknown')
+                fps = info.get('fps', 'unknown')
+
                 return jsonify({
-                    'message': 'Download complete',
-                    'file': output_file,
-                    'path': full_output_path,
-                    'quality': f"{dl_info.get('height', 'unknown')}p",
+                    'message': 'Download and trim complete',
+                    'file': final_output,
+                    'path': final_path,
+                    'quality': f"{quality}p {fps}fps",
                     'title': video_info['title'],
-                    'channel': video_info['channel']
+                    'channel': video_info['channel'],
+                    'duration': f"{end_time - start_time} seconds"
                 })
 
-            except Exception as e:
-                logger.error(f"Download failed: {str(e)}")
-                # Try alternative format if first attempt fails
-                ydl_opts['format'] = '(mp4)[height<=720]/best[ext=mp4]/best'
-                ydl_opts['extract_flat'] = False
+        except Exception as e:
+            logger.error(f"First attempt failed: {str(e)}")
+            # Fallback to lower quality if high quality fails
+            ydl_opts['format'] = 'best[ext=mp4]/best'
+            
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
                 
-                with YoutubeDL(ydl_opts) as alt_ydl:
-                    info = alt_ydl.extract_info(url, download=True)
-                    if info:
-                        return jsonify({
-                            'message': 'Download complete (alternative format)',
-                            'file': output_file,
-                            'path': full_output_path,
-                            'quality': f"{info.get('height', 'unknown')}p",
-                            'title': video_info['title'],
-                            'channel': video_info['channel']
-                        })
-                    raise
+                # Repeat trimming process
+                trim_command = [
+                    'ffmpeg', '-i', temp_path,
+                    '-ss', str(start_time),
+                    '-t', str(end_time - start_time),
+                    '-c:v', 'libx264', '-c:a', 'aac',
+                    '-preset', 'fast', '-crf', '22',
+                    '-y', final_path
+                ]
+                
+                process = subprocess.run(
+                    trim_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+
+                # Clean up temporary file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+                if process.returncode != 0:
+                    raise Exception(f"FFmpeg error: {process.stderr.decode()}")
+
+                quality = info.get('height', 'unknown')
+                fps = info.get('fps', 'unknown')
+
+                return jsonify({
+                    'message': 'Download and trim complete (fallback quality)',
+                    'file': final_output,
+                    'path': final_path,
+                    'quality': f"{quality}p {fps}fps",
+                    'title': video_info['title'],
+                    'channel': video_info['channel'],
+                    'duration': f"{end_time - start_time} seconds"
+                })
 
     except Exception as e:
         error_msg = str(e)
