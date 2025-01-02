@@ -1,38 +1,45 @@
 # filepath: app.py
-from flask import Flask, request, jsonify, send_file,make_response
+from flask import Flask, request, jsonify, send_file, make_response
+from flask_cors import CORS
 import youtube_dl
 import subprocess
 import os
 
 app = Flask(__name__)
-ALLOWED_ORIGINS = ["https://yt-video-downloder.netlify.app", "http://localhost:3000"]
-def add_cors_headers(response, methods=['GET', 'POST', 'OPTIONS']):
-    origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
-        response.headers.update({
-            'Access-Control-Allow-Origin': origin,
-            'Access-Control-Allow-Methods': ', '.join(methods),
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Max-Age': '3600'  # Cache preflight requests
-        })
-    return response
-@app.route('/download', methods=['POST'])
-def download_video():
-    response = make_response()
-    add_cors_headers(response)
-    data = request.json
-    video_url = data['videoUrl']
-    format = data['format']
-    start_time = data.get('startTime')
-    end_time = data.get('endTime')
+ALLOWED_ORIGINS = [
+    "https://yt-video-downloder.netlify.app",
+    "http://localhost:3000",
+    "https://yt-video-downloader-backendppy.onrender.com"
+]
 
-    ydl_opts = {
-        'format': 'best',
-        'outtmpl': 'downloads/%(id)s.%(ext)s',
+# Configure CORS
+CORS(app, resources={
+    r"/*": {
+        "origins": ALLOWED_ORIGINS,
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 3600
     }
+})
+
+@app.route('/download', methods=['POST', 'OPTIONS'])
+def download_video():
+    if request.method == 'OPTIONS':
+        return '', 204
 
     try:
+        data = request.json
+        video_url = data['videoUrl']
+        format = data['format']
+        start_time = data.get('startTime')
+        end_time = data.get('endTime')
+
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': 'downloads/%(id)s.%(ext)s',
+        }
+
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
             video_id = info_dict.get("id", None)
@@ -54,7 +61,7 @@ def download_video():
 
             return jsonify({'success': True, 'downloadUrl': f'/downloads/{video_id}.{format}'})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/downloads/<filename>')
 def download_file(filename):
