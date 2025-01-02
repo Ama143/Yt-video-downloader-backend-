@@ -3,7 +3,11 @@
 set -o errexit
 
 echo "Starting build process..."
+#!/bin/bash
+set -eux
 
+# Download and install ffmpeg
+apt-get update && apt-get install -y ffmpeg
 # Load environment variables if .env exists
 if [ -f .env ]; then
     export $(cat .env | xargs)
