@@ -1,5 +1,2 @@
-flask==2.3.3
-gunicorn==21.2.0
-flask-cors
-yt-dlp
-google-api-python-client==2.108.0
+Flask
+youtube-dl
