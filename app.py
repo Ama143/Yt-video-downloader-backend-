@@ -12,6 +12,8 @@ from pathlib import Path
 from requests.exceptions import RequestException
 import requests
 import browser_cookie3
+import platform
+import json
 
 app = Flask(__name__)
 ALLOWED_ORIGINS = [
@@ -53,6 +55,34 @@ def verify_recaptcha(token):
         logger.error(f"reCAPTCHA verification error: {str(e)}")
         return False
 
+def get_browser_cookie_path(browser_name):
+    """Get the default cookie path based on OS and browser"""
+    system = platform.system().lower()
+    home = str(Path.home())
+    
+    paths = {
+        'linux': {
+            'chrome': f'{home}/.config/google-chrome/Default/Cookies',
+            'firefox': f'{home}/.mozilla/firefox/*.default/cookies.sqlite',
+            'chromium': f'{home}/.config/chromium/Default/Cookies',
+            'opera': f'{home}/.config/opera/Cookies',
+        },
+        'darwin': {  # macOS
+            'chrome': f'{home}/Library/Application Support/Google/Chrome/Default/Cookies',
+            'firefox': f'{home}/Library/Application Support/Firefox/Profiles/*.default/cookies.sqlite',
+            'safari': f'{home}/Library/Cookies/Cookies.binarycookies',
+            'opera': f'{home}/Library/Application Support/com.operasoftware.Opera/Cookies',
+        },
+        'windows': {
+            'chrome': f'{home}/AppData/Local/Google/Chrome/User Data/Default/Cookies',
+            'firefox': f'{home}/AppData/Roaming/Mozilla/Firefox/Profiles/*.default/cookies.sqlite',
+            'edge': f'{home}/AppData/Local/Microsoft/Edge/User Data/Default/Cookies',
+            'opera': f'{home}/AppData/Roaming/Opera Software/Opera Stable/Cookies',
+        }
+    }
+    
+    return paths.get(system, {}).get(browser_name)
+
 def get_youtube_cookies():
     """Get YouTube cookies from all available browsers"""
     all_cookies = {}
@@ -67,12 +97,24 @@ def get_youtube_cookies():
 
     for browser_name, browser_func in browsers.items():
         try:
-            # Set environment variable to bypass DBUS issues
-            os.environ['DBUS_SESSION_BUS_ADDRESS'] = '/dev/null'
-            
-            cookies = browser_func(domain_name='.youtube.com')
+            cookie_path = get_browser_cookie_path(browser_name)
+            if not cookie_path or not Path(cookie_path.split('*')[0]).parent.exists():
+                logger.debug(f"Skipping {browser_name} - cookie path not found")
+                continue
+
+            try:
+                cookies = browser_func(domain_name='.youtube.com')
+            except ValueError as ve:
+                if "not enough values to unpack" in str(ve):
+                    # Try with explicit cookie file path
+                    cookies = browser_func(
+                        domain_name='.youtube.com',
+                        cookie_file=cookie_path
+                    )
+                else:
+                    raise
+
             cookie_count = 0
-            
             for cookie in cookies:
                 if cookie.name in ['SAPISID', 'SID', 'SSID', 'APISID', 'HSID', '__Secure-1PSID', '__Secure-3PSID']:
                     all_cookies[cookie.name] = cookie.value
@@ -81,24 +123,28 @@ def get_youtube_cookies():
             if cookie_count > 0:
                 logger.info(f"Successfully loaded {cookie_count} cookies from {browser_name}")
                 return all_cookies
-                
+
         except Exception as e:
-            if 'DBUS_SESSION_BUS_ADDRESS' in str(e):
-                logger.debug(f"DBUS error for {browser_name}, trying alternative method")
-                try:
-                    # Try alternative cookie loading without DBUS
-                    del os.environ['DBUS_SESSION_BUS_ADDRESS']
-                    cookies = browser_func(domain_name='.youtube.com')
-                    for cookie in cookies:
-                        if cookie.name in ['SAPISID', 'SID', 'SSID', 'APISID', 'HSID', '__Secure-1PSID', '__Secure-3PSID']:
-                            all_cookies[cookie.name] = cookie.value
-                    if all_cookies:
-                        return all_cookies
-                except Exception as inner_e:
-                    logger.warning(f"Alternative method failed for {browser_name}: {str(inner_e)}")
+            error_msg = str(e)
+            if "not enough values to unpack" in error_msg:
+                logger.warning(f"Cookie parsing error for {browser_name} - invalid cookie format")
+            elif "Could not find profile directory" in error_msg:
+                logger.warning(f"No profile directory found for {browser_name}")
             else:
-                logger.warning(f"Could not load {browser_name} cookies: {str(e)}")
-    
+                logger.warning(f"Could not load {browser_name} cookies: {error_msg}")
+
+    # If no cookies found, try to create dummy cookies for testing
+    if not all_cookies and os.environ.get('RENDER') == 'true':
+        logger.info("Running on Render, using environment variable cookies if available")
+        env_cookies = os.environ.get('YOUTUBE_COOKIES')
+        if env_cookies:
+            try:
+                all_cookies = json.loads(env_cookies)
+                logger.info("Successfully loaded cookies from environment variable")
+                return all_cookies
+            except json.JSONDecodeError:
+                logger.error("Failed to parse environment variable cookies")
+
     logger.warning("No cookies could be loaded from any browser")
     return None
 
