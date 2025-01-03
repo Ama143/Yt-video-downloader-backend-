@@ -111,7 +111,7 @@ def get_youtube_cookies():
                         domain_name='.youtube.com',
                         cookie_file=cookie_path
                     )
-                else:
+                else:                    
                     raise
 
             cookie_count = 0
@@ -190,16 +190,53 @@ def check_auth():
     try:
         cookies = get_youtube_cookies()
         if cookies:
-            # Test cookies with a simple YouTube API request
+            # Updated YouTube API request
             headers = {
                 'User-Agent': random.choice(USER_AGENTS),
-                'Cookie': '; '.join([f"{k}={v}" for k, v in cookies.items()])
+                'Cookie': '; '.join([f"{k}={v}" for k, v in cookies.items()]),
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+                'X-Origin': 'https://www.youtube.com'
             }
-            test_response = requests.get('https://www.youtube.com/youtubei/v1/guide?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', headers=headers)
-            if test_response.status_code == 200:
-                return jsonify({'authenticated': True})
+            
+            # API request body
+            payload = {
+                'context': {
+                    'client': {
+                        'clientName': 'WEB',
+                        'clientVersion': '2.20231219.00.00'
+                    }
+                }
+            }
+            
+            try:
+                test_response = requests.post(
+                    'https://www.youtube.com/youtubei/v1/guide',
+                    headers=headers,
+                    json=payload,
+                    timeout=10
+                )
+                
+                logger.debug(f"YouTube API response status: {test_response.status_code}")
+                logger.debug(f"YouTube API response headers: {test_response.headers}")
+                
+                if test_response.status_code == 200:
+                    response_data = test_response.json()
+                    # Check if response contains expected data structure
+                    if 'responseContext' in response_data:
+                        return jsonify({'authenticated': True})
+                    else:
+                        logger.warning("YouTube API response missing expected data")
+                        return jsonify({'authenticated': False, 'error': 'Invalid YouTube API response'})
+                else:
+                    logger.warning(f"YouTube API returned status code: {test_response.status_code}")
+                    return jsonify({'authenticated': False, 'error': f'YouTube API error: {test_response.status_code}'})
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"YouTube API request failed: {str(e)}")
+                return jsonify({'authenticated': False, 'error': 'Failed to verify YouTube authentication'})
 
-        return jsonify({'authenticated': False, 'error': 'Valid YouTube authentication not found'})
+        return jsonify({'authenticated': False, 'error': 'No valid YouTube cookies found'})
     except Exception as e:
         logger.error(f"Auth check error: {str(e)}")
         return jsonify({'authenticated': False, 'error': str(e)})
