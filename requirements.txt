@@ -1,4 +1,17 @@
-Flask
-youtube-dl
-flask-cors
-yt-dlp
+flask==2.0.1
+flask-cors==3.0.10
+yt-dlp==2023.12.30
+browser-cookie3==0.19.1
+requests==2.31.0
+pysocks==1.7.1
+pathlib==1.0.1
+werkzeug==2.0.1
+typing-extensions==4.9.0
+urllib3==2.1.0
+certifi==2023.11.17
+charset-normalizer==3.3.2
+idna==3.6
+cryptography==41.0.7  # Required for browser-cookie3
+pywin32==306; sys_platform == 'win32'  # Required for browser-cookie3 on Windows
+lz4==4.3.2  # Required for browser-cookie3
+keyring==24.3.0  # Required for browser-cookie3
