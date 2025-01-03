@@ -98,6 +98,44 @@ def get_ydl_opts(attempt=0):
         'no_warnings': False,
     }
 
+def verify_youtube_cookies():
+    try:
+        for browser_func in [browser_cookie3.chrome, browser_cookie3.firefox, browser_cookie3.edge]:
+            try:
+                cookies = browser_func(domain_name='.youtube.com')
+                for cookie in cookies:
+                    if cookie.name in ['SAPISID', 'SID', 'SSID', 'APISID']:
+                        return True
+            except Exception as e:
+                logger.warning(f"Could not load browser cookies: {str(e)}")
+                continue
+        return False
+    except Exception as e:
+        logger.error(f"Cookie verification error: {str(e)}")
+        return False
+
+@app.route('/check-auth', methods=['GET', 'OPTIONS'])
+def check_auth():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    try:
+        # Try to get YouTube cookies from common browsers
+        for browser_func in [browser_cookie3.chrome, browser_cookie3.firefox, browser_cookie3.edge]:
+            try:
+                cookies = browser_func(domain_name='.youtube.com')
+                for cookie in cookies:
+                    if cookie.name in ['SAPISID', 'SID', 'SSID']:
+                        return jsonify({'authenticated': True})
+            except Exception as e:
+                logger.warning(f"Could not load browser cookies: {str(e)}")
+                continue
+                
+        return jsonify({'authenticated': False, 'error': 'No YouTube authentication found'})
+    except Exception as e:
+        logger.error(f"Auth check error: {str(e)}")
+        return jsonify({'authenticated': False, 'error': str(e)})
+
 @app.route('/download', methods=['POST', 'OPTIONS'])
 def download_video():
     if request.method == 'OPTIONS':
@@ -115,7 +153,13 @@ def download_video():
             logger.error("Missing required fields in request")
             return jsonify({'success': False, 'error': 'videoUrl and format are required'}), 400
 
-        # Remove recaptcha verification since we're using cookies now
+        # Verify YouTube authentication
+        if not verify_youtube_cookies():
+            return jsonify({
+                'success': False, 
+                'error': 'YouTube authentication required. Please sign in to YouTube and try again.'
+            }), 401
+
         video_url = data['videoUrl']
         format = data['format']
         start_time = data.get('startTime')
