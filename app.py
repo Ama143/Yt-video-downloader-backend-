@@ -53,85 +53,107 @@ def verify_recaptcha(token):
         logger.error(f"reCAPTCHA verification error: {str(e)}")
         return False
 
-def get_ydl_opts(attempt=0):
-    # Get cookies from the most common browsers
-    def get_cookies():
-        cookies = []
-        browsers = [
-            ('chrome', browser_cookie3.chrome),
-            ('firefox', browser_cookie3.firefox),
-            ('edge', browser_cookie3.edge),
-        ]
-        
-        for browser_name, browser_func in browsers:
-            try:
-                cookies = browser_func(domain_name='.youtube.com')
-                logger.info(f"Successfully loaded cookies from {browser_name}")
-                return cookies
-            except Exception as e:
+def get_youtube_cookies():
+    """Get YouTube cookies from all available browsers"""
+    all_cookies = {}
+    browsers = {
+        'chrome': browser_cookie3.chrome,
+        'firefox': browser_cookie3.firefox,
+        'edge': browser_cookie3.edge,
+        'safari': browser_cookie3.safari,
+        'opera': browser_cookie3.opera,
+        'chromium': browser_cookie3.chromium
+    }
+
+    for browser_name, browser_func in browsers.items():
+        try:
+            # Set environment variable to bypass DBUS issues
+            os.environ['DBUS_SESSION_BUS_ADDRESS'] = '/dev/null'
+            
+            cookies = browser_func(domain_name='.youtube.com')
+            cookie_count = 0
+            
+            for cookie in cookies:
+                if cookie.name in ['SAPISID', 'SID', 'SSID', 'APISID', 'HSID', '__Secure-1PSID', '__Secure-3PSID']:
+                    all_cookies[cookie.name] = cookie.value
+                    cookie_count += 1
+            
+            if cookie_count > 0:
+                logger.info(f"Successfully loaded {cookie_count} cookies from {browser_name}")
+                return all_cookies
+                
+        except Exception as e:
+            if 'DBUS_SESSION_BUS_ADDRESS' in str(e):
+                logger.debug(f"DBUS error for {browser_name}, trying alternative method")
+                try:
+                    # Try alternative cookie loading without DBUS
+                    del os.environ['DBUS_SESSION_BUS_ADDRESS']
+                    cookies = browser_func(domain_name='.youtube.com')
+                    for cookie in cookies:
+                        if cookie.name in ['SAPISID', 'SID', 'SSID', 'APISID', 'HSID', '__Secure-1PSID', '__Secure-3PSID']:
+                            all_cookies[cookie.name] = cookie.value
+                    if all_cookies:
+                        return all_cookies
+                except Exception as inner_e:
+                    logger.warning(f"Alternative method failed for {browser_name}: {str(inner_e)}")
+            else:
                 logger.warning(f"Could not load {browser_name} cookies: {str(e)}")
-        return None
+    
+    logger.warning("No cookies could be loaded from any browser")
+    return None
+
+def get_ydl_opts(attempt=0):
+    cookies = get_youtube_cookies()
+    if not cookies:
+        logger.warning("No YouTube cookies found")
 
     format_strategies = [
         'best[height<=720]',
         'best[height<=480]',
         'worst'
     ]
-    
+
     return {
         'format': format_strategies[min(attempt, len(format_strategies)-1)],
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'cookiefile': None,  # Don't use cookie file
-        'cookiesfrombrowser': ('chrome', 'firefox', 'edge'),  # Try multiple browsers
+        'cookiesfrombrowser': None,  # Don't use browser cookies directly
+        'cookies': cookies,  # Use our extracted cookies
         'socket_timeout': 30,
         'retries': 5,
-        'sleep_interval': random.randint(1, 3),  # Random delay between retries
+        'sleep_interval': random.randint(1, 3),
         'max_sleep_interval': 5,
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': random.choice(USER_AGENTS),
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'DNT': '1',
+            'Upgrade-Insecure-Requests': '1',
         },
         'quiet': False,
         'no_warnings': False,
+        'extract_flat': False,
+        'nocheckcertificate': True,
     }
-
-def verify_youtube_cookies():
-    try:
-        for browser_func in [browser_cookie3.chrome, browser_cookie3.firefox, browser_cookie3.edge]:
-            try:
-                cookies = browser_func(domain_name='.youtube.com')
-                for cookie in cookies:
-                    if cookie.name in ['SAPISID', 'SID', 'SSID', 'APISID']:
-                        return True
-            except Exception as e:
-                logger.warning(f"Could not load browser cookies: {str(e)}")
-                continue
-        return False
-    except Exception as e:
-        logger.error(f"Cookie verification error: {str(e)}")
-        return False
 
 @app.route('/check-auth', methods=['GET', 'OPTIONS'])
 def check_auth():
     if request.method == 'OPTIONS':
         return '', 204
-        
+
     try:
-        # Try to get YouTube cookies from common browsers
-        for browser_func in [browser_cookie3.chrome, browser_cookie3.firefox, browser_cookie3.edge]:
-            try:
-                cookies = browser_func(domain_name='.youtube.com')
-                for cookie in cookies:
-                    if cookie.name in ['SAPISID', 'SID', 'SSID']:
-                        return jsonify({'authenticated': True})
-            except Exception as e:
-                logger.warning(f"Could not load browser cookies: {str(e)}")
-                continue
-                
-        return jsonify({'authenticated': False, 'error': 'No YouTube authentication found'})
+        cookies = get_youtube_cookies()
+        if cookies:
+            # Test cookies with a simple YouTube API request
+            headers = {
+                'User-Agent': random.choice(USER_AGENTS),
+                'Cookie': '; '.join([f"{k}={v}" for k, v in cookies.items()])
+            }
+            test_response = requests.get('https://www.youtube.com/youtubei/v1/guide?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', headers=headers)
+            if test_response.status_code == 200:
+                return jsonify({'authenticated': True})
+
+        return jsonify({'authenticated': False, 'error': 'Valid YouTube authentication not found'})
     except Exception as e:
         logger.error(f"Auth check error: {str(e)}")
         return jsonify({'authenticated': False, 'error': str(e)})
